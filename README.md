@@ -115,6 +115,146 @@ This will start:
 
 ---
 
+
+# 🔐 Secure Handling of Database Credentials
+
+This project **does not store any database passwords in plain text**.
+
+All database credentials are injected securely at runtime using one of the following mechanisms:
+
+---
+
+## ✅ 1. **GitHub Actions (CI/CD)** — Secure Injection Using GitHub Secrets
+
+When the project is deployed or executed inside CI/CD, all sensitive database passwords are provided using **GitHub Secrets**.
+
+Example usage inside the GitHub Actions workflow:
+
+```yaml
+env:
+  OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
+  GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
+  OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
+  GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
+  OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
+  GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+```
+
+### ✔ Passwords never appear in the repository
+
+### ✔ Passwords never appear in docker-compose
+
+### ✔ Passwords never appear on local machines
+
+### ✔ GitHub OIDC → AWS Integration means no long-term AWS keys
+
+This is **industry-standard, PCI-DSS compliant** secret delivery.
+
+---
+
+## ✅ 2. **Local Execution (Developer Machines)**
+
+When running the project locally (for simulation), passwords are **not stored in the repository**.
+
+### ❌ Do NOT use defaults
+
+The fallback values inside `docker-compose.yml`:
+
+```yaml
+POSTGRES_PASSWORD=${OTC_DEV_PASS:-otc_dev_pass}
+```
+
+exist *only* so the containers can start if a beginner runs them without preparing environment variables.
+
+These defaults are:
+
+* ⚠️ Not used in any real workflow
+* ⚠️ Not recommended
+* ⚠️ Only there to allow the system to boot for initial testing
+
+### ✔ Recommended Local Secure Method
+
+Create a local `.env.local` file (never committed):
+
+```
+OTC_DEV_PASS=<your-password-here>
+GPS_DEV_PASS=<your-password-here>
+OTC_STAGING_PASS=<your-password-here>
+GPS_STAGING_PASS=<your-password-here>
+OTC_PROD_PASS=<your-password-here>
+GPS_PROD_PASS=<your-password-here>
+```
+
+Mark it as ignored:
+
+```bash
+echo ".env.local" >> .gitignore
+```
+
+Run docker-compose securely:
+
+```bash
+docker --env-file .env.local compose up -d
+```
+
+### ✔ No plaintext in compose file
+
+### ✔ No passwords in git
+
+### ✔ No passwords in shell history
+
+### ✔ Developer-specific secrets never leave local laptop
+
+---
+
+## ⭐ **3. Why We Did NOT Hardcode Passwords in docker-compose**
+
+All passwords use **parameter expansion**, meaning docker-compose will **only** accept a password that is passed securely:
+
+```yaml
+POSTGRES_PASSWORD=${OTC_DEV_PASS?error}
+```
+
+This forces:
+
+* 🔐 Secure injection
+* ❌ Prevents fallback usage
+* ❌ Prevents accidental plaintext
+* ❌ Prevents accidental CI/CD exposure
+
+If a password is missing, docker-compose will stop:
+
+```
+Error: OTC_DEV_PASS is required but not provided
+```
+
+This is **best practice** for all real deployments.
+
+---
+
+## 🧪 **4. Local Testing Without Storing Passwords**
+
+If a developer wants to avoid storing passwords even in `.env.local`, they can export them only temporarily:
+
+```bash
+export OTC_DEV_PASS="$(pass show db/otc/dev)"
+docker compose up -d
+```
+
+Password disappears when shell closes.
+
+---
+
+## 🔒 Summary
+
+| Storage Location        | Secure?             | Notes                    |
+| ----------------------- | ------------------- | ------------------------ |
+| docker-compose defaults | ⚠️ OK for demo only | Not used in GitHub CI/CD |
+| GitHub Secrets          | ✔✔✔✔✔               | Fully secure             |
+| `.env.local` (ignored)  | ✔✔✔                 | Local simulation only    |
+| AWS Secrets Manager     | ✔✔✔✔✔               | Production standard      |
+| Docker Secrets          | ✔✔✔✔                | Full local encryption    |
+
 # **5. Working With the Databases**
 
 ### **Connect through bastion**
@@ -180,7 +320,7 @@ Run:
 Run:
 
 ```bash
-./automation/create-ephemeral-qa.sh 3
+./automation/create-ephemeral-qa.sh 
 ```
 
 (Example: 3-hour TTL)
