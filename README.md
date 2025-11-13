@@ -19,5 +19,5 @@ These instructions will help you set up and test the solution locally, and expla
 ## Setup – Local Docker Environment
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/your-org/infrastructure-assessment.git
+   git clone https://github.com/pratikmohite16/infrastructure-assessment
    cd infrastructure-assessment
