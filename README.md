@@ -117,22 +117,18 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 docker network ls --format "table {{.Name}}\t{{.Driver}}"
 
 # 5. Inspect a specific network
-docker network inspect dev_net | grep Name
+docker network inspect docker_dev_net | grep Name
 
 # 6. Enter the bastion host
 docker exec -it bastion sh
 
 # (Inside bastion) Connect to dev OTC DB
 psql -h otc-db-dev -U postgres
+tem pass is in docker-compose file, Password: otc_dev_pass Note: This is only for Testing purpose for Production use Passwords should be in Secret vaults.
 
 # 7. Attempt DB access from non-bastion (should fail)
 docker exec -it gps-db-dev psql -h otc-db-prod -U postgres
 
-# 8. Check the central audit log
-docker exec -it logging sh -c "tail -f /logs/access-audit.log"
-
-# 9. List backup files
-ls -l ../automation/backups
 
 
 # **5. Working With the Databases**
