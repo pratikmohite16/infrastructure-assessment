@@ -36,10 +36,12 @@ Everything is designed to imitate how this system would operate inside AWS—but
 │       └── init-pii.sql
 │
 ├── automation/
-│   ├── backup-restore.sh
+│   ├── backup.sh
 │   ├── create-ephemeral-qa.sh
 │   ├── secrets-management.sh
-│   └── emergency-backup.sh
+│   |── emergency-backup.sh
+|   ├── validate.sh
+|   
 │
 ├── ci-cd/
 │   └── .github/
@@ -60,7 +62,7 @@ Everything is designed to imitate how this system would operate inside AWS—but
     ├── incident-response.md
     ├── post-mortem.md
     ├── optimization-plan.md
-    └── TEAM_HANDOVER.md
+    
 ```
 
 ---
@@ -117,6 +119,86 @@ This will start:
 * 9 PostgreSQL instances
 * Bastion
 * Central log container
+
+3. Basic Verification Commands (Run These to Confirm Everything Works)
+
+These commands help the assessor quickly confirm:
+
+✔ Containers are running
+✔ Networks exist
+✔ Bastion can reach DBs
+✔ DBs reject direct access
+✔ Logs are updating
+✔ Data exists
+
+✅ 3.1 Check All Containers Are Running
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+
+Expected:
+
+otc-db-dev        Up
+gps-db-dev        Up
+arp-db-dev        Up
+...
+bastion           Up
+logging           Up
+
+✅ 3.2 Check All Networks Exist
+docker network ls --format "table {{.Name}}\t{{.Driver}}"
+
+
+Expected networks:
+
+dev_net
+staging_net
+prod_net
+legacy_dev_net
+legacy_staging_net
+legacy_prod_net
+
+✅ 3.3 Inspect a Network (Check Isolation)
+docker network inspect dev_net | grep Name
+
+✅ 3.4 Enter the Bastion Host
+
+The bastion is the only allowed entry point:
+
+docker exec -it bastion sh
+
+
+Inside bastion, run:
+
+psql -h otc-db-dev -U postgres
+
+
+(Password comes from your env file.)
+
+❌ 3.5 Attempt DB Access From a Non-Bastion Container (Should Fail)
+
+This proves segmentation works:
+
+docker exec -it gps-db-dev psql -h otc-db-prod -U postgres
+
+
+Expected:
+
+psql: could not connect to server
+
+✅ 3.6 Check Centralized Access Audit Log
+docker exec -it logging sh
+tail -f /logs/access-audit.log
+
+
+Whenever you run a query through bastion, you should see:
+
+[ACCESS] bastion → otc-db-dev : user=postgres
+
+✅ 3.7 Check Data Exists in DB
+
+From bastion:
+
+psql -h otc-db-dev -U postgres -c "SELECT * FROM users LIMIT 5;"
 
 ---
 
