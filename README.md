@@ -102,106 +102,37 @@ A **single bastion container** manages all DB connections and logs every access.
 
 # **4. How to Run the System Locally**
 
-# **1. Clone the Repository**
-
-```bash
+# 1. Clone the repository
 git clone https://github.com/pratikmohite16/infrastructure-assessment.git
 cd infrastructure-assessment
 
-### **Start the entire system**
-
+# 2. Start the entire system
 cd docker
 docker-compose up -d
-```
 
-This will start:
+# 3. Verify containers
+docker ps --format "table {{.Names}}\t{{.Status}}"
 
-* 9 PostgreSQL instances
-* Bastion
-* Central log container
-
-3. Basic Verification Commands (Run These to Confirm Everything Works)
-
-These commands help the assessor quickly confirm:
-
-✔ Containers are running
-✔ Networks exist
-✔ Bastion can reach DBs
-✔ DBs reject direct access
-✔ Logs are updating
-✔ Data exists
-
-✅ 3.1 Check All Containers Are Running
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-
-Expected:
-
-otc-db-dev        Up
-gps-db-dev        Up
-arp-db-dev        Up
-...
-bastion           Up
-logging           Up
-
-✅ 3.2 Check All Networks Exist
+# 4. Verify networks
 docker network ls --format "table {{.Name}}\t{{.Driver}}"
 
-
-Expected networks:
-
-dev_net
-staging_net
-prod_net
-legacy_dev_net
-legacy_staging_net
-legacy_prod_net
-
-✅ 3.3 Inspect a Network (Check Isolation)
+# 5. Inspect a specific network
 docker network inspect dev_net | grep Name
 
-✅ 3.4 Enter the Bastion Host
-
-The bastion is the only allowed entry point:
-
+# 6. Enter the bastion host
 docker exec -it bastion sh
 
-
-Inside bastion, run:
-
+# (Inside bastion) Connect to dev OTC DB
 psql -h otc-db-dev -U postgres
 
-
-(Password comes from your env file.)
-
-❌ 3.5 Attempt DB Access From a Non-Bastion Container (Should Fail)
-
-This proves segmentation works:
-
+# 7. Attempt DB access from non-bastion (should fail)
 docker exec -it gps-db-dev psql -h otc-db-prod -U postgres
 
+# 8. Check the central audit log
+docker exec -it logging sh -c "tail -f /logs/access-audit.log"
 
-Expected:
-
-psql: could not connect to server
-
-✅ 3.6 Check Centralized Access Audit Log
-docker exec -it logging sh
-tail -f /logs/access-audit.log
-
-
-Whenever you run a query through bastion, you should see:
-
-[ACCESS] bastion → otc-db-dev : user=postgres
-
-✅ 3.7 Check Data Exists in DB
-
-From bastion:
-
-psql -h otc-db-dev -U postgres -c "SELECT * FROM users LIMIT 5;"
-
----
-
+# 9. List backup files
+ls -l ../automation/backups
 
 
 # **5. Working With the Databases**
