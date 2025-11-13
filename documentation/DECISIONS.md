@@ -382,10 +382,6 @@ The assessment asks to compare paired options and justify choices. Instead of de
   * Is **multi-cloud**, or
   * Requires advanced workflows (e.g., database dynamic credentials, complex PKI, ephemeral tokens)
 
-In an interview, you can explicitly say:
-
-> *“For this ARP migration on AWS, I’d choose Secrets Manager. If the company had existing Vault investment or strong multi-cloud, I’d design around Vault instead.”*
-
 ---
 
 ## 2.2.2 Container Platform — ECS Fargate vs EKS
@@ -589,4 +585,5 @@ At least 7 risks were required; below is an expanded matrix with more depth per 
 | 10 | Operational overload on limited team      | Medium      | Medium | Too many parallel changes: ARP, apps, infra, tools           | Clear phasing, freeze windows, prioritisation, dedicated migration SWAT team.              | Eng Manager     |
 
 ---
+
 
