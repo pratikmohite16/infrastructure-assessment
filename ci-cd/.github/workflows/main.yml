@@ -1,87 +1,141 @@
-name: CI/CD Pipeline
+name: Infrastructure Assessment Pipeline
 
 on:
   push:
     branches:
-      - main
+      - dev
+      - stage
+      - prod
   schedule:
-    - cron: "0 2 * * *"   # Run daily at 2:00 AM UTC (for backups)
+    - cron: "0 2 * * *"   # Daily backup schedule
+  workflow_dispatch: {}   # Manual trigger support
 
 jobs:
-  # Daily backup job (runs on schedule)
-  daily-backup:
-    if: github.event_name == 'schedule'
+
+  ############################################################
+  # STAGE 1 — BACKUP (Scheduled Daily + Before Migration)
+  ############################################################
+  backup:
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'push'
+
     env:
-      # Inject database credentials from repository secrets
       OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
       GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
       OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
       GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
       OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
       GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Perform Database Backups (All envs)
-        run: ./automation/backup-restore.sh
-      - name: Upload Backup Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/checkout@v4
+
+      - name: Run backups for all envs
+        run: bash automations/backup.sh
+
+      - name: Upload backup artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: db-backups
-          path: backups/
+          path: automations/backups/
 
-  # Main pipeline job (runs on code pushes)
-  migrate-databases:
-    if: github.event_name == 'push'
+  ############################################################
+  # STAGE 2 — VALIDATION (Ephemeral QA + Check Backup Integrity)
+  ############################################################
+  validate:
     runs-on: ubuntu-latest
+    needs: backup
+    if: github.event_name == 'push'
+
     env:
-      # Use secrets for database credentials
       OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
       GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
       OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
       GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
       OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
       GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Pre-Migration Validation (Ephemeral QA)
-        run: ./automation/create-ephemeral-qa.sh
+      - name: Spin up ephemeral QA env
+        run: bash automations/create-ephemeral-qa.sh 1
 
-      - name: Run Pre-Migration Tests
-        run: echo "Running basic data validations on QA environment..." 
-        # (Placeholder: actual test commands would go here, e.g., integration tests against QA DB)
+      - name: Validate Database Backups
+        run: bash automations/validate.sh
 
-      - name: Run Database Migration
-        id: run_migration
-        continue-on-error: true   # Allow this step to fail without aborting job
-        run: |
-          echo "Applying database migration scripts to Production..."
-          # (Placeholder: commands to apply DB schema changes or data migration)
-          false  # Simulate a migration failure for demonstration
-
-      - name: Verify Migration Results
-        if: ${{ steps.run_migration.outcome == 'success' }}
-        run: echo "Migration succeeded – running post-migration checks."
-
-      - name: Rollback on Failure
-        if: ${{ steps.run_migration.outcome == 'failure' }}
-        run: |
-          echo "Migration failed – initiating rollback."
-          ./automation/backup-restore.sh   # Take fresh backups (or restore previous state as needed)
-          echo "Rollback complete: Database restored to previous state from backup."
-
-  # Security scanning job (secrets detection)
-  secret-scan:
-    if: github.event_name == 'push'
+  ############################################################
+  # STAGE 3 — MIGRATION WITH PRE/POST VALIDATION
+  ############################################################
+  migrate:
     runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push'
+
+    env:
+      OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
+      GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
+      OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
+      GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
+      OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
+      GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Scan Repository for Secrets
-        uses: zricethezav/gitleaks-action@v1.2.0
+        uses: actions/checkout@v4
+
+      - name: Run migration scripts
+        id: migrate_step
+        continue-on-error: true
+        run: |
+          echo "Running migration..."
+          # Placeholder for migration commands:
+          false  # Simulating failure for visibility
+
+      - name: Post-Migration Verification
+        if: steps.migrate_step.outcome == 'success'
+        run: echo "Migration completed successfully!"
+
+  ############################################################
+  # STAGE 4 — AUTOMATED ROLLBACK ON FAILURE
+  ############################################################
+  rollback:
+    runs-on: ubuntu-latest
+    needs: migrate
+    if: needs.migrate.result == 'failure'
+
+    env:
+      OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
+      GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
+      OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
+      GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
+      OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
+      GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Roll back database using last backup
+        run: |
+          echo "Migration failed. Rolling back..."
+          bash automations/backup.sh
+          echo "Rollback completed."
+
+  ############################################################
+  # STAGE 5 — SECURITY SCANNING (SECRET DETECTION)
+  ############################################################
+  secret-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Gitleaks secret scan
+        uses: zricethezav/gitleaks-action@v2
         with:
-          # Using default gitleaks configuration (adjust as needed for false positives)
           config: ""
