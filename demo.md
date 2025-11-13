@@ -44,6 +44,10 @@ PII Masking:
 restore Done:
 <img width="1031" height="42" alt="image" src="https://github.com/user-attachments/assets/ebce4113-a97d-4646-9293-2e6f8d779e0f" />
 
+Emergency Backup:
+<img width="1016" height="166" alt="image" src="https://github.com/user-attachments/assets/1c4aa767-4930-49da-bdf4-25179acbfaf8" />
+
+
 
 
 
