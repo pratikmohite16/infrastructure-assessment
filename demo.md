@@ -11,6 +11,14 @@ Docker container running:
 Docker networks:
 <img width="942" height="194" alt="image" src="https://github.com/user-attachments/assets/1e8a7af7-0e15-47cf-9d37-3573363f8bb5" />
 
+DB running:
+<img width="947" height="39" alt="image" src="https://github.com/user-attachments/assets/3e60f792-3c3a-472a-8c75-07cb0a8fe996" />
+
+Bastion connection accept/rejct:
+<img width="1013" height="293" alt="image" src="https://github.com/user-attachments/assets/375e1c54-a904-4ec4-86ef-6c01f4e38dab" />
+
+
+
 Backup:
 
 <img width="1031" height="722" alt="image" src="https://github.com/user-attachments/assets/58fc9d70-7704-4f88-8cf8-e80e10f20536" />
