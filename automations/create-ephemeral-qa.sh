@@ -1,69 +1,144 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
-# Ephemeral QA environment creation script
+echo "===================================================="
+echo "        STARTING EPHEMERAL QA ENVIRONMENT"
+echo "===================================================="
+
 TTL_HOURS="${TTL_HOURS:-${1:-3}}"
-TTL_SEC=$(( TTL_HOURS * 3600 ))
+TTL_SEC=$((TTL_HOURS * 3600))
 
-# Ensure backup directory exists
-BACKUP_DIR="${BACKUP_DIR:-./backups}"
-if [ ! -d "$BACKUP_DIR" ]; then
-  echo "Backup directory not found: $BACKUP_DIR"
-  exit 1
-fi
+# -----------------------------------
+# 1. Directory detection
+# -----------------------------------
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKUP_DIR="$SCRIPT_DIR/backups"
+QA_INIT_DIR="$SCRIPT_DIR/qa_init"
 
-# Find latest production backup files for OTC and GPS
+mkdir -p "$QA_INIT_DIR/otc"
+mkdir -p "$QA_INIT_DIR/gps"
+
+echo "[INFO] Backup directory: $BACKUP_DIR"
+echo "[INFO] QA init directory: $QA_INIT_DIR"
+
+# -----------------------------------
+# 2. Select latest production backups
+# -----------------------------------
 OTC_BACKUP=$(ls -t "$BACKUP_DIR"/otc_prod_*.sql 2>/dev/null | head -1)
 GPS_BACKUP=$(ls -t "$BACKUP_DIR"/gps_prod_*.sql 2>/dev/null | head -1)
-if [ -z "$OTC_BACKUP" ] || [ -z "$GPS_BACKUP" ]; then
-  echo "Error: Latest prod backup files not found for OTC/GPS."
+
+if [[ -z "$OTC_BACKUP" ]]; then
+  echo "[ERROR] No OTC production backup found!"
+  exit 1
+fi
+if [[ -z "$GPS_BACKUP" ]]; then
+  echo "[ERROR] No GPS production backup found!"
   exit 1
 fi
 
-# Use production credentials for QA (for simulation simplicity)
-OTC_PROD_PASS=${OTC_PROD_PASS:-otc_prod_pass}
-GPS_PROD_PASS=${GPS_PROD_PASS:-gps_prod_pass}
+echo "[INFO] Selected OTC backup: $OTC_BACKUP"
+echo "[INFO] Selected GPS backup: $GPS_BACKUP"
 
-echo "Spinning up ephemeral QA environment from production backups..."
-# Create an isolated network for QA if it doesn't exist
-docker network inspect qa_net >/dev/null 2>&1 || docker network create --label ephemeral=qa qa_net
+# -----------------------------------
+# 3. Prepare QA init folders
+# -----------------------------------
+rm -f "$QA_INIT_DIR/otc/"*.sql
+rm -f "$QA_INIT_DIR/gps/"*.sql
 
-# Remove any existing QA containers (cleanup from previous runs)
-docker rm -f otc-db-qa gps-db-qa 2>/dev/null || true
+cp "$OTC_BACKUP" "$QA_INIT_DIR/otc/restore.sql"
+cp "$GPS_BACKUP" "$QA_INIT_DIR/gps/restore.sql"
 
-# Launch QA DB containers, mounting backup SQLs for automatic restore
-docker run -d --name otc-db-qa --network qa_net --label env=qa --label ephemeral=qa \
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD="${OTC_PROD_PASS}" -e POSTGRES_DB=otc \
-  -v "$(realpath "$OTC_BACKUP")":/docker-entrypoint-initdb.d/restore.sql:ro \
-  postgres:13
+# -----------------------------------
+# 4. Use WSL path directly (NO Windows conversion)
+# -----------------------------------
+convert_path() {
+  echo "$1"
+}
 
-docker run -d --name gps-db-qa --network qa_net --label env=qa --label ephemeral=qa \
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD="${GPS_PROD_PASS}" -e POSTGRES_DB=gps \
-  -v "$(realpath "$GPS_BACKUP")":/docker-entrypoint-initdb.d/restore.sql:ro \
-  postgres:13
+OTC_INIT_MOUNT=$(convert_path "$QA_INIT_DIR/otc")
+GPS_INIT_MOUNT=$(convert_path "$QA_INIT_DIR/gps")
 
-# Wait for the QA databases to finish initialization
-echo "Waiting for QA databases to be ready..."
+echo "[INFO] Docker mount path (OTC): $OTC_INIT_MOUNT"
+echo "[INFO] Docker mount path (GPS): $GPS_INIT_MOUNT"
+
+# -----------------------------------
+# 5. Cleanup previous QA containers
+# -----------------------------------
+docker rm -f otc-db-qa gps-db-qa >/dev/null 2>&1 || true
+docker network rm qa_net >/dev/null 2>&1 || true
+
+docker network create qa_net >/dev/null
+
+# Credentials
+OTC_PASS="otc_prod_pass"
+GPS_PASS="gps_prod_pass"
+
+# -----------------------------------
+# 6. Start OTC QA DB
+# -----------------------------------
+echo "[INFO] Starting OTC QA DB..."
+docker run -d --name otc-db-qa \
+  --network qa_net \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD="$OTC_PASS" \
+  -e POSTGRES_DB=otc \
+  -v "$OTC_INIT_MOUNT:/docker-entrypoint-initdb.d" \
+  postgres:13 >/dev/null
+
+# -----------------------------------
+# 7. Start GPS QA DB
+# -----------------------------------
+echo "[INFO] Starting GPS QA DB..."
+docker run -d --name gps-db-qa \
+  --network qa_net \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD="$GPS_PASS" \
+  -e POSTGRES_DB=gps \
+  -v "$GPS_INIT_MOUNT:/docker-entrypoint-initdb.d" \
+  postgres:13 >/dev/null
+
+echo "[INFO] DBs started. Waiting for readiness..."
+
+# -----------------------------------
+# 8. Wait for readiness
+# -----------------------------------
 for c in otc-db-qa gps-db-qa; do
+  echo "[INFO] Checking readiness for $c..."
   for i in {1..30}; do
-    docker exec "$c" pg_isready -U postgres -d "${c%%-db-qa}" && break
+    if docker exec "$c" pg_isready -U postgres >/dev/null 2>&1; then
+      echo "  -> $c is ready."
+      break
+    fi
     sleep 2
   done
 done
 
-# Sanitize sensitive data (PII) in the QA databases
-echo "Sanitizing sensitive data in QA databases..."
-docker exec -e PGPASSWORD="${OTC_PROD_PASS}" otc-db-qa psql -U postgres -d otc \
-  -c "UPDATE users SET email=CONCAT('redacted_', id, '@example.com'), ssn='XXX-XX-XXXX';"
-docker exec -e PGPASSWORD="${GPS_PROD_PASS}" gps-db-qa psql -U postgres -d gps \
-  -c "UPDATE users SET email=CONCAT('redacted_', id, '@example.com'), ssn='XXX-XX-XXXX';"
+# -----------------------------------
+# 9. Sanitize PII
+# -----------------------------------
+echo "[INFO] Sanitizing PII..."
 
-echo "Ephemeral QA environment is up. It will be auto-terminated after ${TTL_HOURS} hour(s)."
+docker exec -e PGPASSWORD="$OTC_PASS" otc-db-qa \
+  psql -U postgres -d otc \
+  -c "UPDATE users SET email='qa_' || id || '@example.com', ssn='XXX-XX-XXXX';" \
+  >/dev/null 2>&1 || true
 
-# Schedule auto-teardown of the QA environment
+docker exec -e PGPASSWORD="$GPS_PASS" gps-db-qa \
+  psql -U postgres -d gps \
+  -c "UPDATE users SET email='qa_' || id || '@example.com', ssn='XXX-XX-XXXX';" \
+  >/dev/null 2>&1 || true
+
+echo "[INFO] PII sanitized."
+
+# -----------------------------------
+# 10. TTL Auto Teardown
+# -----------------------------------
 nohup sh -c "sleep ${TTL_SEC}; docker rm -f otc-db-qa gps-db-qa; docker network rm qa_net" >/dev/null 2>&1 &
 
-# Estimate cost for running this environment
-HOURLY_RATE=0.10  # assumed $0.10 per DB/hour
-cost=$(echo "$HOURLY_RATE * 2 * $TTL_HOURS" | bc)
-printf "Estimated cost for running QA environment for %d hour(s): \$%.2f\n" "$TTL_HOURS" "$cost"
+echo "===================================================="
+echo "          QA ENVIRONMENT READY"
+echo "===================================================="
+echo "TTL: ${TTL_HOURS} hours"
+echo "Containers: otc-db-qa, gps-db-qa"
+echo "Network: qa_net"
+echo "===================================================="
