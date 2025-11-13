@@ -1,0 +1,112 @@
+{
+    "SecurityGroups": [
+      {
+        "GroupName": "Dev-Bastion-SG",
+        "Description": "Bastion host for Dev environment",
+        "InboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 22,
+            "Source": "CORP_NET_CIDR",
+            "Description": "Allow SSH from corporate network"
+          }
+        ],
+        "OutboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "Destination": "Dev-DB-SG",
+            "Description": "Allow bastion to access Dev DB servers"
+          }
+        ]
+      },
+      {
+        "GroupName": "Dev-DB-SG",
+        "Description": "Dev environment database servers",
+        "InboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "SourceSecurityGroup": "Dev-Bastion-SG",
+            "Description": "Allow connections from Dev Bastion"
+          }
+        ],
+        "OutboundRules": [
+          {
+            "Protocol": "ALL",
+            "Port": "ALL",
+            "Destination": "0.0.0.0/0",
+            "Description": "Allow outgoing traffic (default rule)"
+          }
+        ]
+      },
+      ... (staging and prod groups similar to above) ...,
+      {
+        "GroupName": "Prod-Bastion-SG",
+        "Description": "Bastion host for Production environment",
+        "InboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 22,
+            "Source": "CORP_NET_CIDR",
+            "Description": "Allow SSH from corporate network"
+          }
+        ],
+        "OutboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "Destination": "Prod-DB-SG",
+            "Description": "Allow bastion to access Prod DB servers"
+          },
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "Destination": "Legacy-ARP-SG",
+            "Description": "Allow bastion to access Legacy ARP DB"
+          }
+        ]
+      },
+      {
+        "GroupName": "Prod-DB-SG",
+        "Description": "Production database servers",
+        "InboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "SourceSecurityGroup": "Prod-Bastion-SG",
+            "Description": "Allow connections from Prod Bastion"
+          }
+        ],
+        "OutboundRules": [
+          {
+            "Protocol": "ALL",
+            "Port": "ALL",
+            "Destination": "0.0.0.0/0",
+            "Description": "Allow outgoing (default rule)"
+          }
+        ]
+      },
+      {
+        "GroupName": "Legacy-ARP-SG",
+        "Description": "Legacy ARP database server",
+        "InboundRules": [
+          {
+            "Protocol": "TCP",
+            "Port": 5432,
+            "SourceSecurityGroup": "Prod-Bastion-SG",
+            "Description": "Allow connections only from Prod Bastion"
+          }
+        ],
+        "OutboundRules": [
+          {
+            "Protocol": "ALL",
+            "Port": "ALL",
+            "Destination": "0.0.0.0/0",
+            "Description": "Allow outgoing (default rule)"
+          }
+        ]
+      }
+    ]
+  }
+  

@@ -1,0 +1,178 @@
+version: "3.9"
+
+services:
+  # Development environment databases
+  otc-db-dev:
+    image: postgres:13
+    container_name: otc-db-dev
+    environment:
+      - POSTGRES_DB=otc
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${OTC_DEV_PASS:-otc_dev_pass}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - dev_otc_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - dev_net
+
+  gps-db-dev:
+    image: postgres:13
+    container_name: gps-db-dev
+    environment:
+      - POSTGRES_DB=gps
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${GPS_DEV_PASS:-gps_dev_pass}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - dev_gps_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - dev_net
+
+  arp-db-dev:
+    image: postgres:13
+    container_name: arp-db-dev
+    environment:
+      - POSTGRES_DB=arp
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${ARP_DEV_PASS:-legacy_unknown_pw}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - dev_arp_data:/var/lib/postgresql/data
+    networks:
+      - legacy_dev_net
+
+  # Staging environment databases
+  otc-db-staging:
+    image: postgres:13
+    container_name: otc-db-staging
+    environment:
+      - POSTGRES_DB=otc
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${OTC_STAGING_PASS:-otc_staging_pass}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - staging_otc_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - staging_net
+
+  gps-db-staging:
+    image: postgres:13
+    container_name: gps-db-staging
+    environment:
+      - POSTGRES_DB=gps
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${GPS_STAGING_PASS:-gps_staging_pass}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - staging_gps_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - staging_net
+
+  arp-db-staging:
+    image: postgres:13
+    container_name: arp-db-staging
+    environment:
+      - POSTGRES_DB=arp
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${ARP_STAGING_PASS:-legacy_unknown_pw}
+    command: ["postgres", "-c", "max_connections=20"]
+    volumes:
+      - staging_arp_data:/var/lib/postgresql/data
+    networks:
+      - legacy_staging_net
+
+  # Production environment databases
+  otc-db-prod:
+    image: postgres:13
+    container_name: otc-db-prod
+    environment:
+      - POSTGRES_DB=otc
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${OTC_PROD_PASS:-otc_prod_pass}
+    command: ["postgres", "-c", "max_connections=50"]
+    volumes:
+      - prod_otc_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - prod_net
+
+  gps-db-prod:
+    image: postgres:13
+    container_name: gps-db-prod
+    environment:
+      - POSTGRES_DB=gps
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${GPS_PROD_PASS:-gps_prod_pass}
+    command: ["postgres", "-c", "max_connections=50"]
+    volumes:
+      - prod_gps_data:/var/lib/postgresql/data
+      - ./configs/init-pii.sql:/docker-entrypoint-initdb.d/init-pii.sql:ro
+    networks:
+      - prod_net
+
+  arp-db-prod:
+    image: postgres:13
+    container_name: arp-db-prod
+    environment:
+      - POSTGRES_DB=arp
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${ARP_PROD_PASS:-legacy_unknown_pw}
+    command: ["postgres", "-c", "max_connections=50"]
+    volumes:
+      - prod_arp_data:/var/lib/postgresql/data
+    networks:
+      - legacy_prod_net
+
+  # Bastion host (jump server) container
+  bastion:
+    image: postgres:13-alpine
+    container_name: bastion
+    command: ["tail", "-f", "/dev/null"]  # keep container running idle
+    volumes:
+      - audit_logs:/logs
+    networks:
+      - dev_net
+      - staging_net
+      - prod_net
+      - legacy_dev_net
+      - legacy_staging_net
+      - legacy_prod_net
+
+  # Central logging container
+  logging:
+    image: alpine:3.18
+    container_name: logging
+    command: ["sh", "-c", "touch /logs/access-audit.log && tail -f /logs/access-audit.log"]
+    volumes:
+      - audit_logs:/logs
+    networks:
+      - dev_net
+      - staging_net
+      - prod_net
+      - legacy_dev_net
+      - legacy_staging_net
+      - legacy_prod_net
+
+networks:
+  dev_net:
+  staging_net:
+  prod_net:
+  legacy_dev_net:
+  legacy_staging_net:
+  legacy_prod_net:
+
+volumes:
+  dev_otc_data:
+  dev_gps_data:
+  dev_arp_data:
+  staging_otc_data:
+  staging_gps_data:
+  staging_arp_data:
+  prod_otc_data:
+  prod_gps_data:
+  prod_arp_data:
+  audit_logs:

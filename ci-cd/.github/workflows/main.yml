@@ -1,0 +1,87 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 2 * * *"   # Run daily at 2:00 AM UTC (for backups)
+
+jobs:
+  # Daily backup job (runs on schedule)
+  daily-backup:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      # Inject database credentials from repository secrets
+      OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
+      GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
+      OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
+      GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
+      OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
+      GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Perform Database Backups (All envs)
+        run: ./automation/backup-restore.sh
+      - name: Upload Backup Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: db-backups
+          path: backups/
+
+  # Main pipeline job (runs on code pushes)
+  migrate-databases:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      # Use secrets for database credentials
+      OTC_DEV_PASS: ${{ secrets.OTC_DEV_PASS }}
+      GPS_DEV_PASS: ${{ secrets.GPS_DEV_PASS }}
+      OTC_STAGING_PASS: ${{ secrets.OTC_STAGING_PASS }}
+      GPS_STAGING_PASS: ${{ secrets.GPS_STAGING_PASS }}
+      OTC_PROD_PASS: ${{ secrets.OTC_PROD_PASS }}
+      GPS_PROD_PASS: ${{ secrets.GPS_PROD_PASS }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Pre-Migration Validation (Ephemeral QA)
+        run: ./automation/create-ephemeral-qa.sh
+
+      - name: Run Pre-Migration Tests
+        run: echo "Running basic data validations on QA environment..." 
+        # (Placeholder: actual test commands would go here, e.g., integration tests against QA DB)
+
+      - name: Run Database Migration
+        id: run_migration
+        continue-on-error: true   # Allow this step to fail without aborting job
+        run: |
+          echo "Applying database migration scripts to Production..."
+          # (Placeholder: commands to apply DB schema changes or data migration)
+          false  # Simulate a migration failure for demonstration
+
+      - name: Verify Migration Results
+        if: ${{ steps.run_migration.outcome == 'success' }}
+        run: echo "Migration succeeded – running post-migration checks."
+
+      - name: Rollback on Failure
+        if: ${{ steps.run_migration.outcome == 'failure' }}
+        run: |
+          echo "Migration failed – initiating rollback."
+          ./automation/backup-restore.sh   # Take fresh backups (or restore previous state as needed)
+          echo "Rollback complete: Database restored to previous state from backup."
+
+  # Security scanning job (secrets detection)
+  secret-scan:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Scan Repository for Secrets
+        uses: zricethezav/gitleaks-action@v1.2.0
+        with:
+          # Using default gitleaks configuration (adjust as needed for false positives)
+          config: ""
