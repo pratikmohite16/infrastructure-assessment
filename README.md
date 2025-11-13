@@ -100,6 +100,12 @@ A **single bastion container** manages all DB connections and logs every access.
 
 # **4. How to Run the System Locally**
 
+# **1. Clone the Repository**
+
+```bash
+git clone https://github.com/pratikmohite16/infrastructure-assessment.git
+cd infrastructure-assessment
+
 ### **Start the entire system**
 
 ```bash
@@ -115,6 +121,167 @@ This will start:
 
 ---
 
+
+
+# **5. Working With the Databases**
+
+### **Connect through bastion**
+
+```bash
+docker exec -it bastion psql -h otc-db-dev -U otc_user
+```
+
+Replace:
+
+* `otc-db-dev` → `gps-db-dev`, `arp-db-dev`
+* `dev` → `staging` or `prod`
+
+---
+
+# **6. Automation Scripts**
+
+All automation lives in the `automation/` folder.
+
+## **6.1 Daily Backups**
+
+Creates:
+
+* SQL dumps
+* Checksums
+* Metadata
+* Audit log entries
+
+Run:
+
+```bash
+./automation/backup.sh
+```
+
+---
+
+## **6.2 Backup Validation**
+
+Performs:
+
+* Restore into temporary DB
+* Schema comparision
+* Row-count checks
+* Data integrity checks
+* PII masking simulation
+
+Run:
+
+```bash
+./automation/validate.sh
+```
+
+---
+
+## **6.3 Create Ephemeral QA Environment**
+
+* Restores latest Prod backup
+* Creates isolated QA network
+* Applies migrations
+* Auto-deletes after TTL
+* Generates cost estimation
+
+Run:
+
+```bash
+./automation/create-ephemeral-qa.sh 
+```
+
+(Example: 3-hour TTL)
+
+---
+
+## **6.4 Secrets Management**
+
+* Rotates OTC & GPS secrets
+* Recovers ARP credentials using system-level inspection
+* Updates all services
+* Logs all actions
+
+Run:
+
+```bash
+./automation/secrets-management.sh rotate
+```
+
+---
+
+## **6.5 Emergency Backup (95% Disk Pressure)**
+
+Simulates real-world outage scenario during high disk usage.
+
+```bash
+./automation/emergency-backup.sh gps-db-staging
+```
+
+---
+
+# **7. CI/CD Pipeline (GitHub Actions)**
+
+The pipeline follows the exact assessment flow:
+
+```
+Backup → Validate → QA → Migrate → Rollback
+```
+
+Located in:
+
+```
+ci-cd/.github/workflows/main.yml
+```
+
+### Pipeline Stages:
+
+1. **Security scan** (secret detection)
+2. **Daily backups (scheduled)**
+3. **Backup validation**
+4. **Ephemeral QA creation**
+5. **Migration simulation**
+6. **Rollback triggered on failure**
+7. **Audit logging**
+
+Secrets are stored in GitHub Actions **environment secrets**.
+
+---
+
+# **8. Security Implementation**
+
+### Files:
+
+* `security/security-groups.json`
+* `security/access-audit.log`
+* `security/compliance-report.sh`
+
+### Features:
+
+✔ Segmented networks
+✔ Zero direct DB access
+✔ Bastion logging
+✔ PII masking
+✔ Connection auditing
+✔ Compliance evidence generation
+✔ ARP legacy isolation
+
+This simulates an enterprise-level security posture.
+
+---
+
+# **9. Migration Flow**
+
+Described in detail in `MIGRATION_NOTES.md`, matching the assessment:
+
+1. Backup
+2. Validate
+3. Create QA clone
+4. Test migration
+5. Migrate Prod
+6. Rollback on failure
+
+ARP includes a special handling path due to unknown password and schema.
 
 # 🔐 Secure Handling of Database Credentials
 
@@ -254,166 +421,6 @@ Password disappears when shell closes.
 | `.env.local` (ignored)  | ✔✔✔                 | Local simulation only    |
 | AWS Secrets Manager     | ✔✔✔✔✔               | Production standard      |
 | Docker Secrets          | ✔✔✔✔                | Full local encryption    |
-
-# **5. Working With the Databases**
-
-### **Connect through bastion**
-
-```bash
-docker exec -it bastion psql -h otc-db-dev -U otc_user
-```
-
-Replace:
-
-* `otc-db-dev` → `gps-db-dev`, `arp-db-dev`
-* `dev` → `staging` or `prod`
-
----
-
-# **6. Automation Scripts**
-
-All automation lives in the `automation/` folder.
-
-## **6.1 Daily Backups**
-
-Creates:
-
-* SQL dumps
-* Checksums
-* Metadata
-* Audit log entries
-
-Run:
-
-```bash
-./automation/backup-restore.sh
-```
-
----
-
-## **6.2 Backup Validation**
-
-Performs:
-
-* Restore into temporary DB
-* Schema comparision
-* Row-count checks
-* Data integrity checks
-* PII masking simulation
-
-Run:
-
-```bash
-./automation/backup-restore.sh validate
-```
-
----
-
-## **6.3 Create Ephemeral QA Environment**
-
-* Restores latest Prod backup
-* Creates isolated QA network
-* Applies migrations
-* Auto-deletes after TTL
-* Generates cost estimation
-
-Run:
-
-```bash
-./automation/create-ephemeral-qa.sh 
-```
-
-(Example: 3-hour TTL)
-
----
-
-## **6.4 Secrets Management**
-
-* Rotates OTC & GPS secrets
-* Recovers ARP credentials using system-level inspection
-* Updates all services
-* Logs all actions
-
-Run:
-
-```bash
-./automation/secrets-management.sh rotate
-```
-
----
-
-## **6.5 Emergency Backup (95% Disk Pressure)**
-
-Simulates real-world outage scenario during high disk usage.
-
-```bash
-./automation/emergency-backup.sh gps-db-staging
-```
-
----
-
-# **7. CI/CD Pipeline (GitHub Actions)**
-
-The pipeline follows the exact assessment flow:
-
-```
-Backup → Validate → QA → Migrate → Rollback
-```
-
-Located in:
-
-```
-ci-cd/.github/workflows/main.yml
-```
-
-### Pipeline Stages:
-
-1. **Security scan** (secret detection)
-2. **Daily backups (scheduled)**
-3. **Backup validation**
-4. **Ephemeral QA creation**
-5. **Migration simulation**
-6. **Rollback triggered on failure**
-7. **Audit logging**
-
-Secrets are stored in GitHub Actions **environment secrets**.
-
----
-
-# **8. Security Implementation**
-
-### Files:
-
-* `security/security-groups.json`
-* `security/access-audit.log`
-* `security/compliance-report.sh`
-
-### Features:
-
-✔ Segmented networks
-✔ Zero direct DB access
-✔ Bastion logging
-✔ PII masking
-✔ Connection auditing
-✔ Compliance evidence generation
-✔ ARP legacy isolation
-
-This simulates an enterprise-level security posture.
-
----
-
-# **9. Migration Flow**
-
-Described in detail in `MIGRATION_NOTES.md`, matching the assessment:
-
-1. Backup
-2. Validate
-3. Create QA clone
-4. Test migration
-5. Migrate Prod
-6. Rollback on failure
-
-ARP includes a special handling path due to unknown password and schema.
 
 ---
 
