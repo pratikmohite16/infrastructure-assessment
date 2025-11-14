@@ -196,7 +196,10 @@ Run:
 Run:
 
 ```bash
-./automation/create-ephemeral-qa.sh 
+./automation/create-ephemeral-qa.sh
+for Mac
+./automation/mac-create-ephemeral-qa.sh
+
 ```
 
 (Example: 3-hour TTL)
